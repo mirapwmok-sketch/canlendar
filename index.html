@@ -120,6 +120,22 @@
                     </svg>
                     設定
                 </button>
+                <!-- 匯出/匯入按鈕 -->
+                <div class="flex gap-2 mt-3">
+                    <button onclick="exportData()" class="flex-1 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200 transition-colors flex items-center justify-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                        </svg>
+                        匯出
+                    </button>
+                    <button onclick="document.getElementById('importFile').click()" class="flex-1 px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm hover:bg-green-200 transition-colors flex items-center justify-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        匯入
+                    </button>
+                    <input type="file" id="importFile" accept=".json" onchange="importData(event)" class="hidden">
+                </div>
                 <!-- 通知權限區域 -->
                 <div id="notificationSection" class="mt-3 hidden">
                     <button id="enableNotificationBtn" class="w-full px-3 py-2 bg-orange-100 text-orange-700 rounded-lg text-sm hover:bg-orange-200 transition-colors flex items-center justify-center gap-2">
@@ -1037,6 +1053,69 @@
 
         function saveTasks() {
             localStorage.setItem('calendarTasks', JSON.stringify(state.tasks));
+        }
+
+        // 匯出資料
+        function exportData() {
+            const data = {
+                tasks: state.tasks,
+                settings: state.settings,
+                exportDate: new Date().toISOString()
+            };
+
+            const jsonStr = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `calendar-backup-${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            alert('✅ 資料已匯出！檔案已下載到你的電腦。');
+        }
+
+        // 匯入資料
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+
+                    if (data.tasks) {
+                        if (confirm(`確定要匯入 ${data.tasks.length} 個事項嗎？\n\n⚠️ 這會覆蓋你現有的所有資料！`)) {
+                            state.tasks = data.tasks;
+                            saveTasks();
+
+                            if (data.settings) {
+                                state.settings = { ...state.settings, ...data.settings };
+                                localStorage.setItem('calendarSettings', JSON.stringify(state.settings));
+                                applySettings();
+                            }
+
+                            renderCalendar();
+                            renderTodayTasks();
+                            updateStats();
+                            alert('✅ 資料匯入成功！');
+                        }
+                    } else {
+                        alert('❌ 檔案格式不正確！');
+                    }
+                } catch (error) {
+                    alert('❌ 匯入失敗：檔案格式錯誤！');
+                    console.error('匯入錯誤:', error);
+                }
+            };
+            reader.readAsText(file);
+
+            // 重置 input，讓同一個檔案可以重複選擇
+            event.target.value = '';
         }
 
         // 渲染今日待辦
