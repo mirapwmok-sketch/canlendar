@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#6366f1',
+                        secondary: '#8b5cf6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .task-item {
+            transition: all 0.3s ease;
+        }
+        .task-item:hover {
+            transform: scale(1.02);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .task-completed {
+            opacity: 0.7;
+        }
+        .task-completed p {
+            text-decoration: line-through;
+        }
+        .calendar-day:hover {
+            background-color: #f3f4f6;
+        }
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+        .notification-popup {
+            animation: slideIn 0.3s ease-out;
+        }
+        .holiday-badge {
+            background-color: #fef2f2;
+            color: #dc2626;
+            font-size: 10px;
+            padding: 1px 4px;
+            border-radius: 4px;
+        }
+        .color-option {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        .color-option:hover {
+            transform: scale(1.1);
+        }
+        .color-option.selected {
+            border-color: #1f2937;
+            box-shadow: 0 0 0 2px white, 0 0 0 4px #6366f1;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- 通知彈出區域 -->
+    <div id="notificationArea" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <div class="flex h-screen">
+        <!-- 側邊欄 -->
+        <aside class="w-72 bg-white shadow-lg flex flex-col">
+            <div id="sidebarHeader" class="p-6 bg-gradient-to-r from-primary to-secondary text-white">
+                <h1 id="appTitle" class="text-2xl font-bold">Calendar</h1>
+                <p id="appSubtitle" class="text-sm opacity-80 mt-1">My Calendar</p>
+            </div>
+
+            <!-- 月份選擇器 -->
+            <div class="p-4 border-b">
+                <label class="block text-sm font-medium text-gray-700 mb-2">選擇月份</label>
+                <input type="month" id="monthSelector"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+
+            <!-- 今日待辦 -->
+            <div class="flex-1 overflow-auto p-4">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">今日待辦</h2>
+                <div id="todayTasks" class="space-y-2">
+                    <!-- 今日事項列表 -->
+                </div>
+            </div>
+
+            <!-- 統計資訊 -->
+            <div class="p-4 bg-gray-50 border-t">
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">待處理</span>
+                    <span id="pendingCount" class="font-semibold text-orange-500">0</span>
+                </div>
+                <div class="flex justify-between text-sm mt-2">
+                    <span class="text-gray-600">已完成</span>
+                    <span id="completedCount" class="font-semibold text-green-500">0</span>
+                </div>
+                <!-- 設定按鈕 -->
+                <button id="settingsBtn" class="w-full mt-3 px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 transition-colors flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    設定
+                </button>
+                <!-- 通知權限區域 -->
+                <div id="notificationSection" class="mt-3 hidden">
+                    <button id="enableNotificationBtn" class="w-full px-3 py-2 bg-orange-100 text-orange-700 rounded-lg text-sm hover:bg-orange-200 transition-colors flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                        </svg>
+                        啟用桌面通知
+                    </button>
+                </div>
+                <div id="notificationEnabled" class="mt-3 hidden">
+                    <div class="flex items-center justify-center gap-2 text-green-600 text-sm mb-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        桌面通知已啟用
+                    </div>
+                    <button id="testNotificationBtn" class="w-full px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs hover:bg-green-200 transition-colors" onclick="testNotification()">
+                        🔔 測試通知
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主要內容區 -->
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <!-- 頂部工具列 -->
+            <header class="bg-white shadow-sm p-4 flex justify-between items-center">
+                <button id="todayBtn" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-secondary transition-colors">
+                    今天
+                </button>
+
+                <div class="flex items-center gap-2">
+                    <button id="prevBtn" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                    </button>
+                    <h2 id="currentTitle" class="text-xl font-semibold text-gray-800 min-w-[200px] text-center"></h2>
+                    <button id="nextBtn" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- 視圖切換 -->
+                <div class="flex bg-gray-100 rounded-lg p-1">
+                    <button id="monthViewBtn" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-white shadow text-primary">
+                        本月
+                    </button>
+                    <button id="weekViewBtn" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:text-gray-800">
+                        本週
+                    </button>
+                </div>
+            </header>
+
+            <!-- 日曆區域 -->
+            <div class="flex-1 overflow-auto p-6">
+                <div id="calendarContainer" class="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <!-- 星期標題 -->
+                    <div id="weekHeaders" class="grid grid-cols-7 bg-gray-50 border-b">
+                        <!-- 動態生成 -->
+                    </div>
+                    <!-- 日曆格子 -->
+                    <div id="calendarGrid" class="grid grid-cols-7">
+                        <!-- 動態生成 -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 新增/編輯事項 Modal -->
+    <div id="taskModal" class="fixed inset-0 modal-overlay hidden items-center justify-center z-40">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div id="taskModalHeader" class="bg-gradient-to-r from-primary to-secondary p-6 text-white">
+                <h3 id="modalTitle" class="text-xl font-bold">新增事項</h3>
+            </div>
+
+            <form id="taskForm" class="p-6 space-y-4">
+                <input type="hidden" id="taskId">
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">日期</label>
+                    <input type="date" id="taskDate"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">事項標題</label>
+                    <input type="text" id="taskTitle"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="輸入事項標題...">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">事項內容</label>
+                    <textarea id="taskContent" rows="3"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-y min-h-[80px]"
+                        placeholder="輸入事項詳細內容..."></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">事項顏色</label>
+                    <div id="taskColorPicker" class="flex gap-2 flex-wrap">
+                        <!-- 動態生成 -->
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">提醒時間 <span class="text-gray-400 text-xs">(選填)</span></label>
+                    <input type="datetime-local" id="taskReminderTime"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                    <button type="button" id="deleteBtn" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors hidden">
+                        刪除
+                    </button>
+                    <button type="button" id="cancelBtn"
+                        class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                        取消
+                    </button>
+                    <button type="submit"
+                        class="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-secondary transition-colors">
+                        儲存
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 設定 Modal -->
+    <div id="settingsModal" class="fixed inset-0 modal-overlay hidden items-center justify-center z-40">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div id="settingsModalHeader" class="bg-gradient-to-r from-primary to-secondary p-6 text-white">
+                <h3 class="text-xl font-bold">⚙️ 設定</h3>
+            </div>
+
+            <div class="p-6 space-y-6">
+                <!-- 自訂名稱 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">行事曆名稱</label>
+                    <input type="text" id="settingTitle"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="Calendar">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">副標題</label>
+                    <input type="text" id="settingSubtitle"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="My Calendar">
+                </div>
+
+                <!-- 主題顏色 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">主題顏色</label>
+                    <div id="themeColorPicker" class="flex gap-2 flex-wrap">
+                        <!-- 動態生成 -->
+                    </div>
+                </div>
+
+                <!-- 一週開始日 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">一週開始日</label>
+                    <div class="flex gap-3">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="weekStart" value="sunday" class="w-4 h-4 text-primary">
+                            <span>週日</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="weekStart" value="monday" class="w-4 h-4 text-primary">
+                            <span>週一</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                    <button type="button" id="resetSettingsBtn"
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                        重置
+                    </button>
+                    <button type="button" id="closeSettingsBtn"
+                        class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                        取消
+                    </button>
+                    <button type="button" id="saveSettingsBtn"
+                        class="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-secondary transition-colors">
+                        儲存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 預設顏色選項
+        const colorOptions = [
+            { name: '紫色', value: '#8b5cf6', bg: 'bg-purple-500' },
+            { name: '藍色', value: '#3b82f6', bg: 'bg-blue-500' },
+            { name: '靛色', value: '#6366f1', bg: 'bg-indigo-500' },
+            { name: '青色', value: '#06b6d4', bg: 'bg-cyan-500' },
+            { name: '綠色', value: '#22c55e', bg: 'bg-green-500' },
+            { name: '黃色', value: '#eab308', bg: 'bg-yellow-500' },
+            { name: '橙色', value: '#f97316', bg: 'bg-orange-500' },
+            { name: '紅色', value: '#ef4444', bg: 'bg-red-500' },
+            { name: '粉色', value: '#ec4899', bg: 'bg-pink-500' },
+            { name: '灰色', value: '#6b7280', bg: 'bg-gray-500' }
+        ];
+
+        // 香港公眾假期 (2024-2026)
+        const hongKongHolidays = {
+            '2024-01-01': '元旦', '2024-02-10': '農曆年初一', '2024-02-11': '農曆年初二', '2024-02-12': '農曆年初三',
+            '2024-03-29': '耶穌受難節', '2024-03-30': '耶穌受難節翌日', '2024-04-01': '復活節星期一',
+            '2024-04-04': '清明節', '2024-05-01': '勞動節', '2024-05-15': '佛誕', '2024-06-10': '端午節',
+            '2024-07-01': '香港特別行政區成立紀念日', '2024-09-18': '中秋節翌日', '2024-10-01': '國慶日',
+            '2024-10-11': '重陽節', '2024-12-25': '聖誕節', '2024-12-26': '聖誕節後第一個周日',
+            '2025-01-01': '元旦', '2025-01-29': '農曆年初一', '2025-01-30': '農曆年初二', '2025-01-31': '農曆年初三',
+            '2025-04-04': '清明節', '2025-04-18': '耶穌受難節', '2025-04-19': '耶穌受難節翌日', '2025-04-21': '復活節星期一',
+            '2025-05-01': '勞動節', '2025-05-05': '佛誕', '2025-05-31': '端午節',
+            '2025-07-01': '香港特別行政區成立紀念日', '2025-10-01': '國慶日', '2025-10-07': '中秋節翌日',
+            '2025-10-29': '重陽節', '2025-12-25': '聖誕節', '2025-12-26': '聖誕節後第一個周日',
+            '2026-01-01': '元旦', '2026-02-17': '農曆年初一', '2026-02-18': '農曆年初二', '2026-02-19': '農曆年初三',
+            '2026-04-03': '耶穌受難節', '2026-04-04': '清明節', '2026-04-06': '復活節星期一',
+            '2026-05-01': '勞動節', '2026-05-24': '佛誕', '2026-06-19': '端午節',
+            '2026-07-01': '香港特別行政區成立紀念日', '2026-09-25': '中秋節翌日', '2026-10-01': '國慶日',
+            '2026-10-18': '重陽節', '2026-12-25': '聖誕節', '2026-12-26': '聖誕節後第一個周日'
+        };
+
+        // 預設設定
+        const defaultSettings = {
+            title: 'Calendar',
+            subtitle: 'My Calendar',
+            themeColor: '#6366f1',
+            weekStart: 'sunday'
+        };
+
+        // 應用程式狀態
+        const state = {
+            currentDate: new Date(),
+            viewMode: 'month',
+            tasks: JSON.parse(localStorage.getItem('calendarTasks')) || [],
+            settings: JSON.parse(localStorage.getItem('calendarSettings')) || { ...defaultSettings },
+            notificationPermission: 'default',
+            selectedTaskColor: '#6366f1'
+        };
+
+        // DOM 元素
+        const elements = {
+            appTitle: document.getElementById('appTitle'),
+            appSubtitle: document.getElementById('appSubtitle'),
+            sidebarHeader: document.getElementById('sidebarHeader'),
+            monthSelector: document.getElementById('monthSelector'),
+            currentTitle: document.getElementById('currentTitle'),
+            weekHeaders: document.getElementById('weekHeaders'),
+            calendarGrid: document.getElementById('calendarGrid'),
+            todayTasks: document.getElementById('todayTasks'),
+            pendingCount: document.getElementById('pendingCount'),
+            completedCount: document.getElementById('completedCount'),
+            taskModal: document.getElementById('taskModal'),
+            taskModalHeader: document.getElementById('taskModalHeader'),
+            taskForm: document.getElementById('taskForm'),
+            modalTitle: document.getElementById('modalTitle'),
+            taskDate: document.getElementById('taskDate'),
+            taskTitle: document.getElementById('taskTitle'),
+            taskContent: document.getElementById('taskContent'),
+            taskReminderTime: document.getElementById('taskReminderTime'),
+            taskColorPicker: document.getElementById('taskColorPicker'),
+            notificationArea: document.getElementById('notificationArea'),
+            deleteBtn: document.getElementById('deleteBtn'),
+            notificationSection: document.getElementById('notificationSection'),
+            notificationEnabled: document.getElementById('notificationEnabled'),
+            enableNotificationBtn: document.getElementById('enableNotificationBtn'),
+            testNotificationBtn: document.getElementById('testNotificationBtn'),
+            settingsBtn: document.getElementById('settingsBtn'),
+            settingsModal: document.getElementById('settingsModal'),
+            settingsModalHeader: document.getElementById('settingsModalHeader'),
+            settingTitle: document.getElementById('settingTitle'),
+            settingSubtitle: document.getElementById('settingSubtitle'),
+            themeColorPicker: document.getElementById('themeColorPicker')
+        };
+
+        // 初始化
+        function init() {
+            applySettings();
+            renderColorPickers();
+            setupEventListeners();
+            updateMonthSelector();
+            renderCalendar();
+            renderTodayTasks();
+            updateStats();
+            checkNotificationStatus();
+            startReminderChecker();
+        }
+
+        // 應用設定
+        function applySettings() {
+            const s = state.settings;
+            elements.appTitle.textContent = s.title || 'Calendar';
+            elements.appSubtitle.textContent = s.subtitle || 'My Calendar';
+
+            // 更新主題顏色
+            document.documentElement.style.setProperty('--primary', s.themeColor);
+            updateThemeColor(s.themeColor);
+        }
+
+        // 更新主題顏色
+        function updateThemeColor(color) {
+            // 更新 Tailwind primary 顏色
+            document.querySelectorAll('.bg-primary').forEach(el => {
+                el.style.backgroundColor = color;
+            });
+            document.querySelectorAll('.text-primary').forEach(el => {
+                el.style.color = color;
+            });
+            document.querySelectorAll('.border-primary').forEach(el => {
+                el.style.borderColor = color;
+            });
+            document.querySelectorAll('.focus\\:ring-primary').forEach(el => {
+                el.style.setProperty('--tw-ring-color', color);
+            });
+
+            // 更新側邊欄和 modal 漸層
+            const gradient = `linear-gradient(to right, ${color}, ${adjustColor(color, 30)})`;
+            elements.sidebarHeader.style.background = gradient;
+            elements.taskModalHeader.style.background = gradient;
+            elements.settingsModalHeader.style.background = gradient;
+        }
+
+        // 調整顏色亮度
+        function adjustColor(hex, percent) {
+            const num = parseInt(hex.slice(1), 16);
+            const r = Math.min(255, Math.floor((num >> 16) * (100 + percent) / 100));
+            const g = Math.min(255, Math.floor(((num >> 8) & 0x00FF) * (100 + percent) / 100));
+            const b = Math.min(255, Math.floor((num & 0x0000FF) * (100 + percent) / 100));
+            return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`;
+        }
+
+        // 渲染顏色選擇器
+        function renderColorPickers() {
+            // 事項顏色選擇器
+            elements.taskColorPicker.innerHTML = colorOptions.map(c => `
+                <div class="color-option ${state.selectedTaskColor === c.value ? 'selected' : ''}"
+                     style="background-color: ${c.value}"
+                     onclick="selectTaskColor('${c.value}')"
+                     title="${c.name}">
+                </div>
+            `).join('');
+
+            // 主題顏色選擇器
+            elements.themeColorPicker.innerHTML = colorOptions.map(c => `
+                <div class="color-option ${state.settings.themeColor === c.value ? 'selected' : ''}"
+                     style="background-color: ${c.value}"
+                     onclick="selectThemeColor('${c.value}')"
+                     title="${c.name}">
+                </div>
+            `).join('');
+
+            // 設定一週開始日
+            const weekStartValue = state.settings.weekStart || 'sunday';
+            document.querySelector(`input[name="weekStart"][value="${weekStartValue}"]`).checked = true;
+        }
+
+        // 選擇事項顏色
+        function selectTaskColor(color) {
+            state.selectedTaskColor = color;
+            renderColorPickers();
+        }
+
+        // 選擇主題顏色
+        function selectThemeColor(color) {
+            state.settings.themeColor = color;
+            renderColorPickers();
+        }
+
+        // 設置事件監聽器
+        function setupEventListeners() {
+            document.getElementById('todayBtn').addEventListener('click', goToToday);
+            document.getElementById('prevBtn').addEventListener('click', goToPrevious);
+            document.getElementById('nextBtn').addEventListener('click', goToNext);
+            document.getElementById('monthViewBtn').addEventListener('click', () => setViewMode('month'));
+            document.getElementById('weekViewBtn').addEventListener('click', () => setViewMode('week'));
+            elements.monthSelector.addEventListener('change', handleMonthChange);
+            document.getElementById('cancelBtn').addEventListener('click', closeModal);
+            elements.taskForm.addEventListener('submit', handleTaskSubmit);
+            elements.deleteBtn.addEventListener('click', deleteCurrentTask);
+            elements.taskModal.addEventListener('click', (e) => {
+                if (e.target === elements.taskModal) closeModal();
+            });
+            elements.enableNotificationBtn.addEventListener('click', requestNotificationPermission);
+            elements.testNotificationBtn.addEventListener('click', testNotification);
+
+            // 設定相關
+            elements.settingsBtn.addEventListener('click', openSettings);
+            document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
+            document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+            document.getElementById('resetSettingsBtn').addEventListener('click', resetSettings);
+            elements.settingsModal.addEventListener('click', (e) => {
+                if (e.target === elements.settingsModal) closeSettings();
+            });
+        }
+
+        // 開啟設定
+        function openSettings() {
+            elements.settingTitle.value = state.settings.title || '';
+            elements.settingSubtitle.value = state.settings.subtitle || '';
+            renderColorPickers();
+            elements.settingsModal.classList.remove('hidden');
+            elements.settingsModal.classList.add('flex');
+        }
+
+        // 關閉設定
+        function closeSettings() {
+            elements.settingsModal.classList.add('hidden');
+            elements.settingsModal.classList.remove('flex');
+        }
+
+        // 儲存設定
+        function saveSettings() {
+            state.settings.title = elements.settingTitle.value.trim() || 'Calendar';
+            state.settings.subtitle = elements.settingSubtitle.value.trim() || 'My Calendar';
+            state.settings.weekStart = document.querySelector('input[name="weekStart"]:checked').value;
+
+            localStorage.setItem('calendarSettings', JSON.stringify(state.settings));
+            applySettings();
+            renderCalendar();
+            closeSettings();
+        }
+
+        // 重置設定
+        function resetSettings() {
+            if (confirm('確定要重置所有設定嗎？')) {
+                state.settings = { ...defaultSettings };
+                localStorage.setItem('calendarSettings', JSON.stringify(state.settings));
+                applySettings();
+                renderColorPickers();
+                renderCalendar();
+            }
+        }
+
+        // 測試通知
+        function testNotification() {
+            if (!('Notification' in window)) {
+                alert('此瀏覽器不支援桌面通知');
+                return;
+            }
+            if (Notification.permission === 'granted') {
+                new Notification('✅ 測試通知成功！', {
+                    body: 'Calendar的桌面通知功能運作正常 🎉',
+                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📅</text></svg>',
+                    tag: 'test-notification',
+                    requireInteraction: true
+                });
+            } else if (Notification.permission === 'denied') {
+                alert('通知權限被拒絕。請在瀏覽器設定中允許通知。');
+            } else {
+                alert('請先點擊「啟用桌面通知」按鈕來授權通知。');
+            }
+        }
+
+        // 檢查通知狀態
+        function checkNotificationStatus() {
+            if (!('Notification' in window)) {
+                elements.notificationSection.classList.remove('hidden');
+                elements.enableNotificationBtn.textContent = '此瀏覽器不支援通知';
+                elements.enableNotificationBtn.disabled = true;
+                elements.enableNotificationBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                return;
+            }
+
+            const permission = Notification.permission;
+            state.notificationPermission = permission;
+
+            if (permission === 'granted') {
+                elements.notificationSection.classList.add('hidden');
+                elements.notificationEnabled.classList.remove('hidden');
+            } else if (permission === 'denied') {
+                elements.notificationSection.classList.remove('hidden');
+                elements.notificationEnabled.classList.add('hidden');
+                elements.enableNotificationBtn.textContent = '通知已被封鎖';
+                elements.enableNotificationBtn.disabled = true;
+                elements.enableNotificationBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                elements.notificationSection.classList.remove('hidden');
+                elements.notificationEnabled.classList.add('hidden');
+            }
+        }
+
+        // 請求通知權限
+        function requestNotificationPermission() {
+            if (!('Notification' in window)) {
+                alert('此瀏覽器不支援桌面通知');
+                return;
+            }
+
+            Notification.requestPermission().then(permission => {
+                state.notificationPermission = permission;
+                checkNotificationStatus();
+                if (permission === 'granted') {
+                    new Notification('✅ Calendar通知已啟用！', {
+                        body: '現在您會收到事項提醒的桌面通知',
+                        icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📅</text></svg>',
+                        tag: 'notification-enabled'
+                    });
+                } else if (permission === 'denied') {
+                    alert('通知權限被拒絕。如需啟用通知，請點擊網址列左邊的鎖頭圖示，將通知設定為「允許」。');
+                }
+            });
+        }
+
+        // 提醒檢查器
+        function startReminderChecker() {
+            setInterval(checkReminders, 5000);
+            checkReminders();
+        }
+
+        // 取得本地時間字串
+        function getLocalDateTimeStr() {
+            const now = new Date();
+            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        }
+
+        // 檢查提醒
+        function checkReminders() {
+            const currentTimeStr = getLocalDateTimeStr();
+            state.tasks.forEach(task => {
+                if (task.reminderTime && !task.reminded && task.status === 'pending') {
+                    const taskTime = task.reminderTime.slice(0, 16);
+                    if (taskTime === currentTimeStr) {
+                        showDesktopNotification(task);
+                        showPopupNotification(task);
+                        task.reminded = true;
+                        saveTasks();
+                    }
+                }
+            });
+        }
+
+        // 顯示桌面通知
+        function showDesktopNotification(task) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const notification = new Notification('🔔 Calendar提醒', {
+                    body: `${task.title}\n${task.content || ''}`,
+                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📅</text></svg>',
+                    tag: task.id,
+                    requireInteraction: true
+                });
+                notification.onclick = () => {
+                    window.focus();
+                    editTask(task.id);
+                    notification.close();
+                };
+            }
+        }
+
+        // 顯示頁面內通知
+        function showPopupNotification(task) {
+            const notification = document.createElement('div');
+            notification.className = 'notification-popup text-white px-6 py-4 rounded-lg shadow-lg max-w-sm';
+            notification.style.background = `linear-gradient(to right, ${state.settings.themeColor}, ${adjustColor(state.settings.themeColor, 30)})`;
+            notification.innerHTML = `
+                <div class="flex items-start gap-3">
+                    <span class="text-2xl">🔔</span>
+                    <div class="flex-1">
+                        <h4 class="font-bold">事項提醒</h4>
+                        <p class="text-sm opacity-90 font-medium">${task.title}</p>
+                        <p class="text-xs opacity-75 mt-1">${task.content || ''}</p>
+                    </div>
+                    <button class="ml-auto hover:opacity-75" onclick="this.parentElement.parentElement.remove()">✕</button>
+                </div>
+            `;
+            elements.notificationArea.appendChild(notification);
+            setTimeout(() => notification.remove(), 10000);
+        }
+
+        // 視圖模式切換
+        function setViewMode(mode) {
+            state.viewMode = mode;
+            document.getElementById('monthViewBtn').classList.toggle('bg-white', mode === 'month');
+            document.getElementById('monthViewBtn').classList.toggle('shadow', mode === 'month');
+            document.getElementById('monthViewBtn').classList.toggle('text-primary', mode === 'month');
+            document.getElementById('monthViewBtn').classList.toggle('text-gray-600', mode !== 'month');
+            document.getElementById('weekViewBtn').classList.toggle('bg-white', mode === 'week');
+            document.getElementById('weekViewBtn').classList.toggle('shadow', mode === 'week');
+            document.getElementById('weekViewBtn').classList.toggle('text-primary', mode === 'week');
+            document.getElementById('weekViewBtn').classList.toggle('text-gray-600', mode !== 'week');
+            renderCalendar();
+        }
+
+        // 導航功能
+        function goToToday() {
+            state.currentDate = new Date();
+            updateMonthSelector();
+            renderCalendar();
+        }
+
+        function goToPrevious() {
+            if (state.viewMode === 'month') {
+                state.currentDate.setMonth(state.currentDate.getMonth() - 1);
+            } else {
+                state.currentDate.setDate(state.currentDate.getDate() - 7);
+            }
+            updateMonthSelector();
+            renderCalendar();
+        }
+
+        function goToNext() {
+            if (state.viewMode === 'month') {
+                state.currentDate.setMonth(state.currentDate.getMonth() + 1);
+            } else {
+                state.currentDate.setDate(state.currentDate.getDate() + 7);
+            }
+            updateMonthSelector();
+            renderCalendar();
+        }
+
+        function handleMonthChange(e) {
+            const [year, month] = e.target.value.split('-').map(Number);
+            state.currentDate = new Date(year, month - 1, 1);
+            renderCalendar();
+        }
+
+        function updateMonthSelector() {
+            const year = state.currentDate.getFullYear();
+            const month = (state.currentDate.getMonth() + 1).toString().padStart(2, '0');
+            elements.monthSelector.value = `${year}-${month}`;
+        }
+
+        // 渲染日曆
+        function renderCalendar() {
+            renderWeekHeaders();
+            if (state.viewMode === 'month') {
+                renderMonthView();
+            } else {
+                renderWeekView();
+            }
+            updateTitle();
+        }
+
+        // 渲染星期標題
+        function renderWeekHeaders() {
+            const weekStart = state.settings.weekStart || 'sunday';
+            const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+            let headers;
+
+            if (weekStart === 'monday') {
+                headers = [
+                    { name: '一', color: 'text-gray-600' },
+                    { name: '二', color: 'text-gray-600' },
+                    { name: '三', color: 'text-gray-600' },
+                    { name: '四', color: 'text-gray-600' },
+                    { name: '五', color: 'text-gray-600' },
+                    { name: '六', color: 'text-blue-500' },
+                    { name: '日', color: 'text-red-500' }
+                ];
+            } else {
+                headers = [
+                    { name: '日', color: 'text-red-500' },
+                    { name: '一', color: 'text-gray-600' },
+                    { name: '二', color: 'text-gray-600' },
+                    { name: '三', color: 'text-gray-600' },
+                    { name: '四', color: 'text-gray-600' },
+                    { name: '五', color: 'text-gray-600' },
+                    { name: '六', color: 'text-blue-500' }
+                ];
+            }
+
+            elements.weekHeaders.innerHTML = headers.map(h =>
+                `<div class="p-3 text-center text-sm font-semibold ${h.color}">${h.name}</div>`
+            ).join('');
+        }
+
+        function updateTitle() {
+            const year = state.currentDate.getFullYear();
+            const month = state.currentDate.getMonth() + 1;
+            if (state.viewMode === 'month') {
+                elements.currentTitle.textContent = `${year} 年 ${month} 月`;
+            } else {
+                const weekStart = getWeekStart(state.currentDate);
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 6);
+                elements.currentTitle.textContent = `${weekStart.getMonth() + 1}/${weekStart.getDate()} - ${weekEnd.getMonth() + 1}/${weekEnd.getDate()}`;
+            }
+        }
+
+        function renderMonthView() {
+            elements.calendarGrid.className = 'grid grid-cols-7';
+            const year = state.currentDate.getFullYear();
+            const month = state.currentDate.getMonth();
+            const weekStartDay = (state.settings.weekStart || 'sunday') === 'sunday' ? 0 : 1;
+
+            const firstDay = new Date(year, month, 1);
+            let startOffset = firstDay.getDay() - weekStartDay;
+            if (startOffset < 0) startOffset += 7;
+
+            const startDate = new Date(firstDay);
+            startDate.setDate(startDate.getDate() - startOffset);
+
+            let html = '';
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            for (let i = 0; i < 42; i++) {
+                const currentDate = new Date(startDate);
+                currentDate.setDate(startDate.getDate() + i);
+                const dateStr = formatDate(currentDate);
+                const isCurrentMonth = currentDate.getMonth() === month;
+                const isToday = currentDate.getTime() === today.getTime();
+                const dayTasks = getTasksForDate(dateStr);
+                const holiday = hongKongHolidays[dateStr];
+                const isHoliday = !!holiday;
+                const dayOfWeek = currentDate.getDay();
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+                html += `
+                    <div class="calendar-day min-h-[100px] border-b border-r p-2 cursor-pointer ${!isCurrentMonth ? 'bg-gray-50' : ''} ${isToday ? 'bg-primary/10' : ''}"
+                         onclick="openModal('${dateStr}')">
+                        <div class="flex justify-between items-start">
+                            <span class="${isToday ? 'bg-primary text-white w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold' : ''} ${!isCurrentMonth ? 'text-gray-400' : isHoliday || dayOfWeek === 0 ? 'text-red-500 font-semibold' : dayOfWeek === 6 ? 'text-blue-500' : 'text-gray-700'} text-sm">
+                                ${currentDate.getDate()}
+                            </span>
+                            <div class="flex items-center gap-1 flex-wrap justify-end">
+                                ${holiday ? `<span class="holiday-badge">${holiday}</span>` : ''}
+                                ${dayTasks.length > 0 ? `<span class="text-xs font-medium" style="color: ${state.settings.themeColor}">${dayTasks.length} 項</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="mt-1 space-y-1 max-h-[60px] overflow-hidden">
+                            ${dayTasks.slice(0, 3).map(task => `
+                                <div class="text-xs px-2 py-1 rounded truncate ${task.status === 'completed' ? 'bg-green-100 text-green-700 line-through' : ''}"
+                                     style="${task.status !== 'completed' ? `background-color: ${task.color || state.settings.themeColor}20; color: ${task.color || state.settings.themeColor}` : ''}"
+                                     onclick="event.stopPropagation(); editTask('${task.id}')">
+                                    ${task.title || '(無標題)'}
+                                </div>
+                            `).join('')}
+                            ${dayTasks.length > 3 ? `<div class="text-xs text-gray-400">+${dayTasks.length - 3} 更多</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+
+            elements.calendarGrid.innerHTML = html;
+        }
+
+        function renderWeekView() {
+            elements.calendarGrid.className = 'grid grid-cols-7';
+            const weekStart = getWeekStart(state.currentDate);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+            const weekStartDay = (state.settings.weekStart || 'sunday') === 'sunday' ? 0 : 1;
+
+            let html = '';
+            for (let i = 0; i < 7; i++) {
+                const currentDate = new Date(weekStart);
+                currentDate.setDate(weekStart.getDate() + i);
+                const dateStr = formatDate(currentDate);
+                const isToday = currentDate.getTime() === today.getTime();
+                const dayTasks = getTasksForDate(dateStr);
+                const dayIndex = (i + weekStartDay) % 7;
+                const holiday = hongKongHolidays[dateStr];
+
+                html += `
+                    <div class="calendar-day min-h-[600px] border-r ${isToday ? 'bg-primary/10' : ''} ${holiday ? 'bg-red-50' : ''} flex flex-col">
+                        <div class="p-4 border-b text-center ${isToday ? 'bg-primary text-white' : ''}" ${isToday ? `style="background-color: ${state.settings.themeColor}"` : ''}>
+                            <div class="text-sm ${isToday ? '' : holiday ? 'text-red-500' : 'text-gray-500'}">週${dayNames[dayIndex]}</div>
+                            <div class="text-3xl font-bold ${isToday ? '' : 'text-gray-800'}">${currentDate.getDate()}</div>
+                            ${holiday ? `<div class="text-xs text-red-500 mt-1">${holiday}</div>` : ''}
+                        </div>
+                        <div class="flex-1 p-3 space-y-3 overflow-auto" onclick="openModal('${dateStr}')">
+                            ${dayTasks.map(task => `
+                                <div class="task-item p-3 rounded-lg ${task.status === 'completed' ? 'bg-green-100 task-completed' : ''} cursor-pointer"
+                                     style="${task.status !== 'completed' ? `background-color: ${task.color || state.settings.themeColor}15` : ''}"
+                                     onclick="event.stopPropagation(); editTask('${task.id}')">
+                                    <div class="flex items-start gap-3">
+                                        <button onclick="event.stopPropagation(); toggleTaskStatus('${task.id}')"
+                                            class="mt-0.5 w-5 h-5 rounded border-2 ${task.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-gray-300'} flex items-center justify-center flex-shrink-0">
+                                            ${task.status === 'completed' ? '<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>' : ''}
+                                        </button>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-base font-medium ${task.status === 'completed' ? 'text-green-700' : 'text-gray-800'}">${task.title || '(無標題)'}</p>
+                                            ${task.content ? `<p class="text-sm text-gray-500 mt-1">${task.content}</p>` : ''}
+                                            ${task.reminderTime ? `<p class="text-xs mt-2 flex items-center gap-1" style="color: ${task.color || state.settings.themeColor}"><span>🔔</span> ${formatReminderTime(task.reminderTime)}</p>` : ''}
+                                        </div>
+                                        <button onclick="event.stopPropagation(); deleteTask('${task.id}')"
+                                            class="text-gray-400 hover:text-red-500 flex-shrink-0">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            elements.calendarGrid.innerHTML = html;
+        }
+
+        // 事項相關函數
+        function getTasksForDate(dateStr) {
+            return state.tasks.filter(task => task.date === dateStr).sort((a, b) => {
+                if (!a.reminderTime) return 1;
+                if (!b.reminderTime) return -1;
+                return a.reminderTime.localeCompare(b.reminderTime);
+            });
+        }
+
+        function formatReminderTime(dateTimeStr) {
+            if (!dateTimeStr) return '';
+            const date = new Date(dateTimeStr);
+            return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function openModal(dateStr) {
+            document.getElementById('taskId').value = '';
+            elements.taskDate.value = dateStr;
+            elements.taskTitle.value = '';
+            elements.taskContent.value = '';
+            elements.taskReminderTime.value = '';
+            state.selectedTaskColor = state.settings.themeColor;
+            renderColorPickers();
+            elements.modalTitle.textContent = '新增事項';
+            elements.deleteBtn.classList.add('hidden');
+            elements.taskModal.classList.remove('hidden');
+            elements.taskModal.classList.add('flex');
+            elements.taskTitle.focus();
+        }
+
+        function editTask(taskId) {
+            const task = state.tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            document.getElementById('taskId').value = task.id;
+            elements.taskDate.value = task.date;
+            elements.taskTitle.value = task.title;
+            elements.taskContent.value = task.content || '';
+            elements.taskReminderTime.value = task.reminderTime || '';
+            state.selectedTaskColor = task.color || state.settings.themeColor;
+            renderColorPickers();
+            elements.modalTitle.textContent = '編輯事項';
+            elements.deleteBtn.classList.remove('hidden');
+            elements.taskModal.classList.remove('hidden');
+            elements.taskModal.classList.add('flex');
+            elements.taskTitle.focus();
+        }
+
+        function closeModal() {
+            elements.taskModal.classList.add('hidden');
+            elements.taskModal.classList.remove('flex');
+        }
+
+        function handleTaskSubmit(e) {
+            e.preventDefault();
+
+            const taskId = document.getElementById('taskId').value;
+            const taskData = {
+                id: taskId || Date.now().toString(),
+                date: elements.taskDate.value,
+                title: elements.taskTitle.value.trim(),
+                content: elements.taskContent.value.trim(),
+                color: state.selectedTaskColor,
+                reminderTime: elements.taskReminderTime.value,
+                status: 'pending',
+                reminded: false
+            };
+
+            if (taskId) {
+                const index = state.tasks.findIndex(t => t.id === taskId);
+                if (index !== -1) {
+                    taskData.status = state.tasks[index].status;
+                    taskData.reminded = state.tasks[index].reminded;
+                    state.tasks[index] = taskData;
+                }
+            } else {
+                state.tasks.push(taskData);
+            }
+
+            saveTasks();
+            closeModal();
+            renderCalendar();
+            renderTodayTasks();
+            updateStats();
+        }
+
+        function toggleTaskStatus(taskId) {
+            const task = state.tasks.find(t => t.id === taskId);
+            if (task) {
+                task.status = task.status === 'completed' ? 'pending' : 'completed';
+                saveTasks();
+                renderCalendar();
+                renderTodayTasks();
+                updateStats();
+            }
+        }
+
+        function deleteTask(taskId) {
+            if (confirm('確定要刪除此事項嗎？')) {
+                state.tasks = state.tasks.filter(t => t.id !== taskId);
+                saveTasks();
+                closeModal();
+                renderCalendar();
+                renderTodayTasks();
+                updateStats();
+            }
+        }
+
+        function deleteCurrentTask() {
+            const taskId = document.getElementById('taskId').value;
+            if (taskId) deleteTask(taskId);
+        }
+
+        function saveTasks() {
+            localStorage.setItem('calendarTasks', JSON.stringify(state.tasks));
+        }
+
+        // 渲染今日待辦
+        function renderTodayTasks() {
+            const today = formatDate(new Date());
+            const todayTasks = getTasksForDate(today);
+
+            if (todayTasks.length === 0) {
+                elements.todayTasks.innerHTML = `
+                    <div class="text-center text-gray-400 py-8">
+                        <svg class="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                        </svg>
+                        <p class="text-sm">今日無待辦事項</p>
+                    </div>
+                `;
+                return;
+            }
+
+            elements.todayTasks.innerHTML = todayTasks.map(task => `
+                <div class="task-item p-3 rounded-lg ${task.status === 'completed' ? 'bg-green-50 task-completed' : ''} cursor-pointer"
+                     style="${task.status !== 'completed' ? `background-color: ${task.color || state.settings.themeColor}15` : ''}"
+                     onclick="editTask('${task.id}')">
+                    <div class="flex items-start gap-2">
+                        <button onclick="event.stopPropagation(); toggleTaskStatus('${task.id}')"
+                            class="mt-0.5 w-5 h-5 rounded-full border-2 ${task.status === 'completed' ? 'bg-green-500 border-green-500' : ''} flex items-center justify-center flex-shrink-0"
+                            style="${task.status !== 'completed' ? `border-color: ${task.color || state.settings.themeColor}` : ''}">
+                            ${task.status === 'completed' ? '<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>' : ''}
+                        </button>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium ${task.status === 'completed' ? 'text-green-700' : 'text-gray-800'}">${task.title || '(無標題)'}</p>
+                            ${task.content ? `<p class="text-xs text-gray-500 truncate">${task.content}</p>` : ''}
+                            ${task.reminderTime ? `<p class="text-xs mt-0.5" style="color: ${task.color || state.settings.themeColor}">🔔 ${formatReminderTime(task.reminderTime)}</p>` : ''}
+                        </div>
+                        <button onclick="event.stopPropagation(); deleteTask('${task.id}')"
+                            class="text-gray-400 hover:text-red-500 flex-shrink-0">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 更新統計
+        function updateStats() {
+            const today = formatDate(new Date());
+            const todayTasks = state.tasks.filter(t => t.date === today);
+            elements.pendingCount.textContent = todayTasks.filter(t => t.status === 'pending').length;
+            elements.completedCount.textContent = todayTasks.filter(t => t.status === 'completed').length;
+        }
+
+        // 工具函數
+        function formatDate(date) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+
+        function formatDisplayDate(dateStr) {
+            const [year, month, day] = dateStr.split('-');
+            return `${year} 年 ${parseInt(month)} 月 ${parseInt(day)} 日`;
+        }
+
+        function getWeekStart(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const weekStartDay = (state.settings.weekStart || 'sunday') === 'sunday' ? 0 : 1;
+            let diff = day - weekStartDay;
+            if (diff < 0) diff += 7;
+            d.setDate(d.getDate() - diff);
+            return d;
+        }
+
+        // 啟動應用
+        init();
+    </script>
+</body>
+</html>
